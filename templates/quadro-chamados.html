@@ -477,5 +477,52 @@ function mostrarToast(mensagem, tipo) {
 }
         function logout() { localStorage.clear(); window.location.href = '/login'; }
     </script>
+    <!-- Socket.IO -->
+<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+<script>
+
+    
+    // Configuração do Socket.IO
+    let socket;
+    
+    function initSocket() {
+        socket = io('http://localhost:5000');
+        
+        socket.on('connect', function() {
+            console.log('🟢 Conectado ao servidor');
+            if (typeof mostrarToast === 'function') {
+                mostrarToast('Conectado em tempo real', 'success');
+            }
+        });
+        
+        socket.on('atualizacao_sistema', function(data) {
+            console.log('📢 Atualização:', data);
+            
+            let mensagem = '';
+            if (data.acao === 'CREATE') mensagem = '🆕 Novo chamado criado!';
+            else if (data.acao === 'UPDATE') mensagem = '✏️ Chamado atualizado!';
+            else if (data.acao === 'MOVE') mensagem = '📦 Chamado movido!';
+            else if (data.acao === 'DELETE') mensagem = '🗑️ Chamado deletado!';
+            
+            if (mensagem && typeof mostrarToast === 'function') {
+                mostrarToast(mensagem, 'info');
+            }
+            
+            // Recarregar dados baseado na página
+            if (window.location.pathname === '/dashboard' && typeof carregarChamados === 'function') {
+                carregarChamados();
+            } else if (window.location.pathname === '/quadro-chamados' && typeof carregarChamadosLista === 'function') {
+                carregarChamadosLista();
+            }
+        });
+    }
+    
+    // Iniciar após login
+    document.addEventListener('DOMContentLoaded', function() {
+        if (localStorage.getItem('token')) {
+            initSocket();
+        }
+    });
+</script>
 </body>
 </html>

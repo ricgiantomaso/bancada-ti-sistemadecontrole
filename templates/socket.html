@@ -1,0 +1,109 @@
+<!-- Socket.IO Configuration -->
+<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+<script>
+    // Variável global do socket
+    let socket = null;
+    let socketConectado = false;
+
+    // Inicializar conexão Socket.IO
+    function initSocket() {
+        if (!localStorage.getItem('token')) return;
+        
+        try {
+            socket = io('http://localhost:5000', {
+                reconnection: true,
+                reconnectionAttempts: 5,
+                reconnectionDelay: 1000,
+                timeout: 10000
+            });
+
+            socket.on('connect', function() {
+                console.log('🟢 Socket.IO conectado');
+                socketConectado = true;
+                mostrarToast('Conectado ao servidor em tempo real', 'success');
+            });
+
+            socket.on('disconnect', function() {
+                console.log('🔴 Socket.IO desconectado');
+                socketConectado = false;
+                mostrarToast('Conexão em tempo real perdida', 'warning');
+            });
+
+            socket.on('connect_error', function(error) {
+                console.error('❌ Erro na conexão Socket.IO:', error);
+                socketConectado = false;
+            });
+
+            socket.on('atualizacao_sistema', function(data) {
+                console.log('📢 Atualização recebida:', data);
+                processarAtualizacao(data);
+            });
+
+            socket.on('conexao_estabelecida', function(data) {
+                console.log('✅ Conexão estabelecida:', data);
+            });
+
+        } catch (error) {
+            console.error('Erro ao inicializar Socket.IO:', error);
+        }
+    }
+
+    // Processar atualizações recebidas
+    function processarAtualizacao(data) {
+        const acao = data.acao;
+        const tipo = data.tipo;
+        
+        // Mostrar notificação
+        let mensagem = '';
+        if (tipo === 'equipamento') {
+            if (acao === 'CREATE') mensagem = '🆕 Novo chamado criado!';
+            else if (acao === 'UPDATE') mensagem = '✏️ Chamado atualizado!';
+            else if (acao === 'MOVE') mensagem = '📦 Chamado movido!';
+            else if (acao === 'DELETE') mensagem = '🗑️ Chamado deletado!';
+        }
+        
+        if (mensagem) {
+            mostrarToast(`${mensagem} (por ${data.usuario})`, 'info');
+        }
+        
+        // Recarregar dados baseado na página atual
+        const path = window.location.pathname;
+        
+        if (path === '/dashboard' && typeof carregarChamados === 'function') {
+            carregarChamados();
+        } else if (path === '/quadro-chamados' && typeof carregarChamadosLista === 'function') {
+            carregarChamadosLista();
+        } else if (path.includes('/editar-chamado') && data.id == getUrlParam('id')) {
+            // Se estiver editando o chamado que foi alterado, recarregar
+            if (typeof carregarChamado === 'function') {
+                carregarChamado();
+            }
+        }
+    }
+
+    // Função auxiliar para pegar parâmetros da URL
+    function getUrlParam(name) {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get(name);
+    }
+
+    // Função para solicitar atualização manual
+    function solicitarAtualizacao() {
+        if (socket && socketConectado) {
+            socket.emit('solicitar_atualizacao', { 
+                pagina: window.location.pathname,
+                timestamp: new Date().toISOString()
+            });
+            mostrarToast('Solicitando atualização...', 'info');
+        } else {
+            mostrarToast('Sem conexão em tempo real', 'warning');
+        }
+    }
+
+    // Inicializar após o login
+    document.addEventListener('DOMContentLoaded', function() {
+        if (localStorage.getItem('token')) {
+            setTimeout(initSocket, 1000);
+        }
+    });
+</script>

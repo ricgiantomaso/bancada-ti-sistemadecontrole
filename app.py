@@ -1,30 +1,39 @@
 from flask import Flask, request, jsonify, render_template, redirect, session
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
+from flask_socketio import SocketIO, emit, join_room, leave_room
 from datetime import datetime, timedelta
 from functools import wraps
 import hashlib
 import secrets
+import json
 
 app = Flask(__name__)
 
-# ==================== CONFIGURAÇÕES ====================
-# Configuração CORS completa
-CORS(app, 
-     origins=["http://127.0.0.1:5000", "http://localhost:5000"],
-     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-     allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
-     expose_headers=["Content-Type", "X-Requested-With"],
-     supports_credentials=True,
-     max_age=3600)
-
+# Configurações
 app.config['SECRET_KEY'] = 'sua-chave-secreta-aqui-mude-em-producao'
+app.config['SESSION_COOKIE_SAMESITE'] = 'None'
+app.config['SESSION_COOKIE_SECURE'] = False
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:@localhost:3306/flask_crud'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Configuração CORS
+CORS(app, 
+     origins=["http://127.0.0.1:5000", "http://localhost:5000"],
+     supports_credentials=True,
+     allow_headers=["Content-Type", "Authorization"])
+
+# Socket.IO
+socketio = SocketIO(app, 
+                   cors_allowed_origins=["http://127.0.0.1:5000", "http://localhost:5000"],
+                   async_mode='threading',
+                   ping_timeout=60,
+                   ping_interval=25)
 
 db = SQLAlchemy(app)
 
 # ==================== MODELOS ====================
+
 class Usuario(db.Model):
     __tablename__ = 'usuarios'
     
@@ -129,34 +138,21 @@ class Log(db.Model):
             'descricao': self.descricao,
             'ip': self.ip,
             'user_agent': self.user_agent,
-            'data': self.created_at.strftime('%d/%m/%Y %H:%M:%S') if self.created_at else None,
-            'dados_antigos': self.dados_antigos,
-            'dados_novos': self.dados_novos
+            'data': self.created_at.strftime('%d/%m/%Y %H:%M:%S') if self.created_at else None
         }
 
 # ==================== FUNÇÃO DE LOG ====================
 
 def registrar_log(acao, entidade, entidade_id=None, descricao=None, 
                   dados_antigos=None, dados_novos=None):
-    """
-    Registra uma ação no sistema
-    """
     try:
-        # Pegar informações do usuário
-        usuario_id = None
-        usuario_nome = 'Sistema'
+        usuario_id = session.get('usuario_id')
+        usuario_nome = session.get('usuario_nome', 'Sistema')
         
-        # Tentar pegar da sessão
-        if 'usuario_id' in session:
-            usuario_id = session.get('usuario_id')
-            usuario_nome = session.get('usuario_nome', 'Sistema')
-        
-        # Se não tiver na sessão, tenta pegar do token
         if not usuario_id and hasattr(request, 'usuario'):
             usuario_id = request.usuario.id
             usuario_nome = request.usuario.nome_completo
         
-        # Criar log
         log = Log(
             usuario_id=usuario_id,
             usuario_nome=usuario_nome,
@@ -178,13 +174,55 @@ def registrar_log(acao, entidade, entidade_id=None, descricao=None,
         print(f"❌ Erro ao registrar log: {e}")
         db.session.rollback()
 
+# ==================== FUNÇÕES SOCKET.IO ====================
+
+def notificar_equipamento(acao, equipamento):
+    """
+    Notifica todos os clientes sobre mudanças em equipamentos
+    """
+    try:
+        dados = {
+            'tipo': 'equipamento',
+            'acao': acao,
+            'id': equipamento.id,
+            'dados': equipamento.to_dict(),
+            'usuario': session.get('usuario_nome', 'Sistema'),
+            'timestamp': datetime.utcnow().isoformat()
+        }
+        
+        # Emitir para todos os clientes conectados
+        socketio.emit('atualizacao_sistema', dados)
+        print(f"📢 Notificação enviada: {acao} - Equipamento #{equipamento.id}")
+        
+    except Exception as e:
+        print(f"❌ Erro ao notificar: {e}")
+
+def notificar_exclusao(id, dados_antigos):
+    """
+    Notifica sobre exclusão de equipamento
+    """
+    try:
+        dados = {
+            'tipo': 'equipamento',
+            'acao': 'DELETE',
+            'id': id,
+            'dados': dados_antigos,
+            'usuario': session.get('usuario_nome', 'Sistema'),
+            'timestamp': datetime.utcnow().isoformat()
+        }
+        
+        socketio.emit('atualizacao_sistema', dados)
+        print(f"📢 Notificação enviada: DELETE - Equipamento #{id}")
+        
+    except Exception as e:
+        print(f"❌ Erro ao notificar: {e}")
+
 # ==================== CRIAR TABELAS ====================
+
 with app.app_context():
-    # Criar tabelas se não existirem (NÃO APAGA DADOS)
     db.create_all()
-    print("✅ Tabelas verificadas/criadas com sucesso!")
+    print("✅ Tabelas criadas/verificadas!")
     
-    # Criar admin apenas se não existir
     if not Usuario.query.filter_by(usuario='admin').first():
         admin = Usuario(
             nome_completo='Administrador',
@@ -196,14 +234,12 @@ with app.app_context():
         db.session.add(admin)
         db.session.commit()
         print("✅ Admin criado!")
-    else:
-        print("✅ Admin já existe")
 
-# ==================== DECORADOR DE TOKEN ====================
+# ==================== DECORADORES ====================
+
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        # Para requisições OPTIONS, não verificar token
         if request.method == 'OPTIONS':
             return f(*args, **kwargs)
             
@@ -213,7 +249,6 @@ def token_required(f):
             return jsonify({'erro': 'Token não fornecido'}), 401
         
         try:
-            # Token simples (ID do usuário + hash)
             user_id = int(token.split('-')[0])
             usuario = Usuario.query.get(user_id)
             if not usuario:
@@ -226,6 +261,7 @@ def token_required(f):
     return decorated
 
 # ==================== ROTAS DE PÁGINAS ====================
+
 @app.route('/')
 def home():
     return redirect('/login')
@@ -262,7 +298,32 @@ def editar_chamado():
 def pagina_logs():
     return render_template('logs.html')
 
+# ==================== SOCKET.IO EVENTOS ====================
+
+@socketio.on('connect')
+def handle_connect():
+    print(f"🟢 Cliente conectado: {request.sid}")
+    if 'usuario_id' in session:
+        join_room(f"user_{session['usuario_id']}")
+        emit('conexao_estabelecida', {
+            'mensagem': f'Bem-vindo {session.get("usuario_nome")}!',
+            'usuario_id': session['usuario_id']
+        })
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    print(f"🔴 Cliente desconectado: {request.sid}")
+
+@socketio.on('solicitar_atualizacao')
+def handle_solicitar_atualizacao(data):
+    print(f"📥 Solicitação de atualização de {request.sid}")
+    emit('resposta_atualizacao', {
+        'mensagem': 'Atualização solicitada com sucesso',
+        'timestamp': datetime.utcnow().isoformat()
+    })
+
 # ==================== ROTAS DA API - LOGIN ====================
+
 @app.route('/api/login', methods=['POST', 'OPTIONS'])
 def api_login():
     if request.method == 'OPTIONS':
@@ -280,7 +341,6 @@ def api_login():
         ).first()
         
         if not usuario or not usuario.verificar_senha(dados['senha']):
-            # Registrar tentativa de login falha
             registrar_log(
                 acao='LOGIN_FAILED',
                 entidade='usuario',
@@ -297,14 +357,11 @@ def api_login():
             )
             return jsonify({'erro': 'Usuário inativo'}), 403
         
-        # Criar sessão
         session['usuario_id'] = usuario.id
         session['usuario_nome'] = usuario.nome_completo
         
-        # Gerar token
         token = f"{usuario.id}-{secrets.token_hex(8)}"
         
-        # Registrar login bem-sucedido
         registrar_log(
             acao='LOGIN',
             entidade='usuario',
@@ -322,6 +379,7 @@ def api_login():
         return jsonify({'erro': str(e)}), 500
 
 # ==================== ROTAS DA API - USUÁRIOS ====================
+
 @app.route('/api/usuarios', methods=['OPTIONS'])
 def usuarios_options():
     return '', 200
@@ -331,15 +389,12 @@ def usuarios_options():
 def criar_usuario():
     try:
         dados = request.get_json()
-        print("📝 Dados recebidos:", dados)
         
-        # Validar campos obrigatórios
         campos = ['nome_completo', 'usuario', 'email', 'numero_funcional', 'senha']
         for campo in campos:
             if campo not in dados or not dados[campo]:
                 return jsonify({'erro': f'Campo {campo} obrigatório'}), 400
         
-        # Verificar se já existe
         if Usuario.query.filter_by(usuario=dados['usuario']).first():
             return jsonify({'erro': 'Nome de usuário já existe'}), 400
         
@@ -349,11 +404,9 @@ def criar_usuario():
         if Usuario.query.filter_by(numero_funcional=dados['numero_funcional']).first():
             return jsonify({'erro': 'Número funcional já cadastrado'}), 400
         
-        # Validar senha (mínimo 6 caracteres)
         if len(dados['senha']) < 6:
             return jsonify({'erro': 'Senha deve ter no mínimo 6 caracteres'}), 400
         
-        # Criar usuário
         usuario = Usuario(
             nome_completo=dados['nome_completo'],
             usuario=dados['usuario'],
@@ -363,9 +416,8 @@ def criar_usuario():
         usuario.set_senha(dados['senha'])
         
         db.session.add(usuario)
-        db.session.flush()  # Para pegar o ID antes do commit
+        db.session.flush()
         
-        # Registrar criação
         registrar_log(
             acao='CREATE',
             entidade='usuario',
@@ -383,7 +435,6 @@ def criar_usuario():
         
     except Exception as e:
         db.session.rollback()
-        print("❌ Erro:", str(e))
         return jsonify({'erro': str(e)}), 500
 
 @app.route('/api/usuarios', methods=['GET'])
@@ -396,6 +447,7 @@ def listar_usuarios():
         return jsonify({'erro': str(e)}), 500
 
 # ==================== ROTAS DA API - EQUIPAMENTOS ====================
+
 @app.route('/api/equipamentos', methods=['OPTIONS'])
 def equipamentos_options():
     return '', 200
@@ -428,19 +480,15 @@ def buscar_equipamento(id):
 def criar_equipamento():
     try:
         dados = request.get_json()
-        print("📝 Dados equipamento:", dados)
         
-        # Validar campos
         campos = ['data_entrada', 'local', 'tipo_equipamento', 'patrimonio', 'defeito', 'prioridade']
         for campo in campos:
             if campo not in dados or not dados[campo]:
                 return jsonify({'erro': f'Campo {campo} obrigatório'}), 400
         
-        # Verificar patrimônio
         if Equipamento.query.filter_by(patrimonio=dados['patrimonio']).first():
             return jsonify({'erro': 'Patrimônio já cadastrado'}), 400
         
-        # Criar equipamento
         equipamento = Equipamento(
             data_entrada=datetime.strptime(dados['data_entrada'], '%Y-%m-%d').date(),
             local=dados['local'],
@@ -455,7 +503,6 @@ def criar_equipamento():
         db.session.add(equipamento)
         db.session.flush()
         
-        # Registrar criação
         registrar_log(
             acao='CREATE',
             entidade='equipamento',
@@ -466,29 +513,59 @@ def criar_equipamento():
         
         db.session.commit()
         
+        # NOTIFICAR TODOS OS USUÁRIOS
+        notificar_equipamento('CREATE', equipamento)
+        
         return jsonify(equipamento.to_dict()), 201
         
     except Exception as e:
         db.session.rollback()
-        print("❌ Erro:", str(e))
         return jsonify({'erro': str(e)}), 500
 
-@app.route('/api/equipamentos/estatisticas', methods=['GET', 'OPTIONS'])
+@app.route('/api/equipamentos/<int:id>', methods=['PUT', 'OPTIONS'])
 @token_required
-def estatisticas_equipamentos():
+def atualizar_equipamento(id):
     if request.method == 'OPTIONS':
         return '', 200
         
     try:
-        total = Equipamento.query.count()
-        stats = {
-            'entrada': Equipamento.query.filter_by(status='entrada').count(),
-            'manutencao': Equipamento.query.filter_by(status='manutencao').count(),
-            'pronto': Equipamento.query.filter_by(status='pronto').count(),
-            'entregue': Equipamento.query.filter_by(status='entregue').count()
-        }
-        return jsonify({'total': total, 'por_status': stats})
+        equipamento = Equipamento.query.get(id)
+        if not equipamento:
+            return jsonify({'erro': 'Equipamento não encontrado'}), 404
+        
+        dados_antigos = equipamento.to_dict()
+        dados = request.get_json()
+        
+        campos_permitidos = ['local', 'tipo_equipamento', 'defeito', 
+                           'observacoes', 'prioridade', 'status']
+        
+        campos_alterados = []
+        for campo in campos_permitidos:
+            if campo in dados and dados[campo] != getattr(equipamento, campo):
+                campos_alterados.append(campo)
+                setattr(equipamento, campo, dados[campo])
+        
+        if campos_alterados:
+            registrar_log(
+                acao='UPDATE',
+                entidade='equipamento',
+                entidade_id=id,
+                descricao=f"Equipamento #{id} atualizado: {', '.join(campos_alterados)}",
+                dados_antigos=dados_antigos,
+                dados_novos=equipamento.to_dict()
+            )
+            
+            db.session.commit()
+            
+            # NOTIFICAR TODOS OS USUÁRIOS
+            notificar_equipamento('UPDATE', equipamento)
+        else:
+            db.session.commit()
+        
+        return jsonify(equipamento.to_dict())
+        
     except Exception as e:
+        db.session.rollback()
         return jsonify({'erro': str(e)}), 500
 
 @app.route('/api/equipamentos/<int:id>/mover', methods=['PATCH', 'OPTIONS'])
@@ -512,7 +589,6 @@ def mover_equipamento(id):
         
         equipamento.status = novo_status
         
-        # Registrar movimento
         registrar_log(
             acao='MOVE',
             entidade='equipamento',
@@ -523,6 +599,9 @@ def mover_equipamento(id):
         )
         
         db.session.commit()
+        
+        # NOTIFICAR TODOS OS USUÁRIOS
+        notificar_equipamento('MOVE', equipamento)
         
         return jsonify({
             'mensagem': 'Status atualizado com sucesso',
@@ -546,7 +625,6 @@ def deletar_equipamento(id):
         
         dados_equipamento = equipamento.to_dict()
         
-        # Registrar exclusão
         registrar_log(
             acao='DELETE',
             entidade='equipamento',
@@ -557,59 +635,35 @@ def deletar_equipamento(id):
         
         db.session.delete(equipamento)
         db.session.commit()
+        
+        # NOTIFICAR TODOS OS USUÁRIOS
+        notificar_exclusao(id, dados_equipamento)
+        
         return jsonify({'mensagem': 'Equipamento deletado'})
         
     except Exception as e:
         db.session.rollback()
         return jsonify({'erro': str(e)}), 500
 
-@app.route('/api/equipamentos/<int:id>', methods=['PUT', 'OPTIONS'])
+@app.route('/api/equipamentos/estatisticas', methods=['GET', 'OPTIONS'])
 @token_required
-def atualizar_equipamento(id):
+def estatisticas_equipamentos():
     if request.method == 'OPTIONS':
         return '', 200
         
     try:
-        equipamento = Equipamento.query.get(id)
-        if not equipamento:
-            return jsonify({'erro': 'Equipamento não encontrado'}), 404
-        
-        dados_antigos = equipamento.to_dict()
-        dados = request.get_json()
-        
-        # Campos que podem ser atualizados
-        campos_permitidos = ['local', 'tipo_equipamento', 'defeito', 
-                           'observacoes', 'prioridade', 'status']
-        
-        campos_alterados = []
-        for campo in campos_permitidos:
-            if campo in dados and dados[campo] != getattr(equipamento, campo):
-                campos_alterados.append(campo)
-                setattr(equipamento, campo, dados[campo])
-        
-        if campos_alterados:
-            # Registrar atualização
-            registrar_log(
-                acao='UPDATE',
-                entidade='equipamento',
-                entidade_id=id,
-                descricao=f"Equipamento #{id} atualizado: {', '.join(campos_alterados)}",
-                dados_antigos=dados_antigos,
-                dados_novos=equipamento.to_dict()
-            )
-        
-        db.session.commit()
-        
-        return jsonify({
-            'mensagem': 'Equipamento atualizado com sucesso',
-            'equipamento': equipamento.to_dict()
-        })
-        
+        total = Equipamento.query.count()
+        stats = {
+            'entrada': Equipamento.query.filter_by(status='entrada').count(),
+            'manutencao': Equipamento.query.filter_by(status='manutencao').count(),
+            'pronto': Equipamento.query.filter_by(status='pronto').count(),
+            'entregue': Equipamento.query.filter_by(status='entregue').count()
+        }
+        return jsonify({'total': total, 'por_status': stats})
     except Exception as e:
-        db.session.rollback()
         return jsonify({'erro': str(e)}), 500
 
-# ==================== ROTAS DE UNIDADES ====================
+# ==================== ROTAS DA API - UNIDADES ====================
 
 @app.route('/api/unidades', methods=['GET', 'OPTIONS'])
 @token_required
@@ -620,20 +674,6 @@ def listar_unidades():
     try:
         unidades = Unidade.query.filter_by(ativo=True).order_by(Unidade.nome).all()
         return jsonify([u.to_dict() for u in unidades])
-    except Exception as e:
-        return jsonify({'erro': str(e)}), 500
-
-@app.route('/api/unidades/<int:id>', methods=['GET', 'OPTIONS'])
-@token_required
-def buscar_unidade(id):
-    if request.method == 'OPTIONS':
-        return '', 200
-        
-    try:
-        unidade = Unidade.query.get(id)
-        if not unidade:
-            return jsonify({'erro': 'Unidade não encontrada'}), 404
-        return jsonify(unidade.to_dict())
     except Exception as e:
         return jsonify({'erro': str(e)}), 500
 
@@ -657,7 +697,6 @@ def criar_unidade():
         db.session.add(unidade)
         db.session.flush()
         
-        # Registrar criação
         registrar_log(
             acao='CREATE',
             entidade='unidade',
@@ -683,41 +722,11 @@ def listar_logs():
         return '', 200
         
     try:
-        # Verificar se é admin (apenas admin pode ver logs)
         if request.usuario.usuario != 'admin':
             return jsonify({'erro': 'Acesso negado'}), 403
             
         logs = Log.query.order_by(Log.created_at.desc()).limit(5000).all()
         return jsonify([l.to_dict() for l in logs])
-    except Exception as e:
-        return jsonify({'erro': str(e)}), 500
-
-@app.route('/api/logs/estatisticas', methods=['GET', 'OPTIONS'])
-@token_required
-def estatisticas_logs():
-    if request.method == 'OPTIONS':
-        return '', 200
-        
-    try:
-        if request.usuario.usuario != 'admin':
-            return jsonify({'erro': 'Acesso negado'}), 403
-            
-        hoje = datetime.utcnow().date()
-        
-        stats = {
-            'total': Log.query.count(),
-            'hoje': Log.query.filter(db.func.date(Log.created_at) == hoje).count(),
-            'por_acao': {
-                'CREATE': Log.query.filter_by(acao='CREATE').count(),
-                'UPDATE': Log.query.filter_by(acao='UPDATE').count(),
-                'DELETE': Log.query.filter_by(acao='DELETE').count(),
-                'MOVE': Log.query.filter_by(acao='MOVE').count(),
-                'LOGIN': Log.query.filter_by(acao='LOGIN').count(),
-                'LOGIN_FAILED': Log.query.filter_by(acao='LOGIN_FAILED').count()
-            }
-        }
-        
-        return jsonify(stats)
     except Exception as e:
         return jsonify({'erro': str(e)}), 500
 
@@ -736,5 +745,6 @@ def logout():
     return redirect('/login')
 
 # ==================== INICIALIZAÇÃO ====================
+
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    socketio.run(app, debug=True, port=5000)
