@@ -1,0 +1,26 @@
+<!-- templates/unidades.html -->
+<div class="mb-3">
+    <h5>Cadastro de Unidades</h5>
+    <div class="row">
+        <div class="col-md-6">
+            <input type="text" class="form-control" id="novaUnidade" placeholder="Nome da unidade">
+        </div>
+        <div class="col-md-4">
+            <input type="text" class="form-control" id="novoTelefone" placeholder="Telefone">
+        </div>
+        <div class="col-md-2">
+            <button class="btn btn-primary" onclick="salvarUnidade()">Adicionar</button>
+        </div>
+    </div>
+    <table class="table mt-3">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Unidade</th>
+                <th>Telefone</th>
+                <th>Ações</th>
+            </tr>
+        </thead>
+        <tbody id="tabelaUnidades"></tbody>
+    </table>
+</div>

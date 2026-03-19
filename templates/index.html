@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bancada de Manutenção - Kanban</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+        }
+
+        .navbar {
+            background: linear-gradient(135deg, #5a67d8 0%, #6b46a0 100%) !important;
+            padding: 12px 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .navbar-brand {
+            font-size: 1.5rem;
+            letter-spacing: 1px;
+            color: white !important;
+            font-weight: 700;
+        }
+
+        .nav-link {
+            font-size: 0.95rem;
+            padding: 8px 15px !important;
+            border-radius: 8px;
+            transition: all 0.3s;
+            margin: 0 3px;
+            color: rgba(255,255,255,0.9) !important;
+        }
+
+        .nav-link:hover {
+            background: rgba(255,255,255,0.2);
+            color: white !important;
+        }
+
+        .nav-link.active {
+            background: rgba(255,255,255,0.25);
+            color: white !important;
+            font-weight: 600;
+        }
+
+        .kanban-board {
+            display: flex;
+            gap: 20px;
+            padding: 20px;
+            overflow-x: auto;
+            min-height: calc(100vh - 90px);
+            align-items: flex-start;
+        }
+
+        .kanban-wrapper {
+            flex: 1;
+            min-width: 300px;
+        }
+
+        .kanban-column {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            transition: all 0.3s;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .kanban-column.drag-over {
+            transform: scale(1.02);
+            box-shadow: 0 12px 40px rgba(102, 126, 234, 0.4);
+            border: 2px dashed #667eea;
+        }
+
+        .column-title {
+            padding: 15px 20px;
+            font-weight: 700;
+            font-size: 1.1rem;
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .coluna-entrada .column-title { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .coluna-manutencao .column-title { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+        .coluna-pronto .column-title { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+        .coluna-entregue .column-title { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+
+        .kanban-tasks {
+            padding: 15px;
+            min-height: 500px;
+            max-height: 700px;
+            overflow-y: auto;
+        }
+
+        .task-card {
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            border-left: 4px solid transparent;
+            transition: all 0.3s;
+            position: relative;
+            user-select: none;
+            border: 1px solid #e2e8f0;
+            cursor: grab;
+        }
+
+        .task-card:active {
+            cursor: grabbing;
+        }
+
+        .task-card.dragging {
+            opacity: 0.5;
+            transform: scale(0.98);
+        }
+
+        .task-card.entrada { border-left-color: #667eea; }
+        .task-card.manutencao { border-left-color: #f5576c; }
+        .task-card.pronto { border-left-color: #4facfe; }
+        .task-card.entregue { border-left-color: #43e97b; }
+
+        .task-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .task-id {
+            font-size: 0.8rem;
+            color: #64748b;
+            font-weight: 600;
+        }
+
+        .task-priority {
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .priority-alta { background: #f5576c; color: white; }
+        .priority-media { background: #f093fb; color: white; }
+        .priority-baixa { background: #4facfe; color: white; }
+        .priority-urgente { background: #f5576c; color: white; animation: pulse 1s infinite; }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+
+        .task-title {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #0f172a;
+        }
+
+        .task-desc {
+            font-size: 0.85rem;
+            color: #475569;
+            margin-bottom: 12px;
+            line-height: 1.4;
+        }
+
+        .task-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.8rem;
+            color: #64748b;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 10px;
+            margin-top: 5px;
+        }
+
+        .task-actions {
+            display: flex;
+            gap: 5px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .task-card:hover .task-actions {
+            opacity: 1;
+        }
+
+        .task-actions button {
+            padding: 4px 8px;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-edit {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-delete {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+
+        .drag-handle {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            color: #94a3b8;
+            cursor: grab;
+            font-size: 1rem;
+        }
+
+        .count {
+            font-weight: 600;
+        }
+
+        .toast-notification {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            padding: 15px 25px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            display: none;
+            z-index: 9999;
+            animation: slideIn 0.3s;
+            border-left: 4px solid;
+        }
+
+        .toast-notification.success { border-left-color: #48bb78; }
+        .toast-notification.error { border-left-color: #f56565; }
+        .toast-notification.info { border-left-color: #667eea; }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0%); opacity: 1; }
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: white;
+        }
+
+        .loading::after {
+            content: '';
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-top: 3px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: rgba(255,255,255,0.1); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div id="toast" class="toast-notification"></div>
+
+    <!-- HEADER -->
+    <nav class="navbar navbar-expand-lg fixed-top shadow-sm">
+        <div class="container-fluid">
+            <a class="navbar-brand fw-semibold" href="/dashboard">
+                <i class="fas fa-tools me-2"></i>🔧 Bancada TI
+            </a>
+
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#menuSistema">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="menuSistema">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/equipamento/cadastro">
+                            <i class="fas fa-desktop me-1"></i>Cadastrar Equipamento
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/usuario/cadastro">
+                            <i class="fas fa-user-plus me-1"></i>Cadastrar Usuário
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/quadro-chamados">
+                            <i class="fas fa-clipboard-list me-1"></i>Lista
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/relatorios">
+                            <i class="fas fa-chart-bar me-1"></i>Relatórios
+                        </a>
+                    </li>
+                     <li class="nav-item">
+                        <a class="nav-link" href="/logs">
+                            <i class="fas fa-chart-bar me-1"></i>Logs
+                        </a>
+                    </li>
+                </ul>
+
+                <div class="d-flex align-items-center gap-3">
+                    <span class="text-light small">
+                        <i class="fas fa-user-circle me-1"></i>
+                        <span id="userNameDisplay">Carregando...</span>
+                    </span>
+                    <button onclick="logout()" class="btn btn-outline-light btn-sm">
+                        <i class="fas fa-sign-out-alt me-1"></i>Sair
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div style="margin-top: 80px;"></div>
+
+    <!-- Kanban Board -->
+    <div class="kanban-board">
+        <div class="kanban-wrapper">
+            <div class="kanban-column coluna-entrada" data-status="entrada">
+                <div class="column-title">
+                    <span><i class="fas fa-inbox me-2"></i>Entrada (<span class="count" id="count-entrada">0</span>)</span>
+                </div>
+                <div class="kanban-tasks" id="entrada"></div>
+            </div>
+        </div>
+
+        <div class="kanban-wrapper">
+            <div class="kanban-column coluna-manutencao" data-status="manutencao">
+                <div class="column-title">
+                    <span><i class="fas fa-tools me-2"></i>Em Manutenção (<span class="count" id="count-manutencao">0</span>)</span>
+                </div>
+                <div class="kanban-tasks" id="manutencao"></div>
+            </div>
+        </div>
+
+        <div class="kanban-wrapper">
+            <div class="kanban-column coluna-pronto" data-status="pronto">
+                <div class="column-title">
+                    <span><i class="fas fa-check-circle me-2"></i>Pronto (<span class="count" id="count-pronto">0</span>)</span>
+                </div>
+                <div class="kanban-tasks" id="pronto"></div>
+            </div>
+        </div>
+
+        <div class="kanban-wrapper">
+            <div class="kanban-column coluna-entregue" data-status="entregue">
+                <div class="column-title">
+                    <span><i class="fas fa-check-double me-2"></i>Entregue (<span class="count" id="count-entregue">0</span>)</span>
+                    <div>
+                        <button onclick="abrirModalArquivados()" class="btn btn-sm btn-info me-2">
+                            <i class="fas fa-archive me-1"></i>Ver Arquivados
+                        </button>
+                        <button onclick="arquivarEntregues()" class="btn btn-sm btn-outline-light">
+                            <i class="fas fa-archive me-1"></i>Arquivar
+                        </button>
+                    </div>
+                </div>
+                <div class="kanban-tasks" id="entregue"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Arquivados -->
+    <div class="modal fade" id="modalArquivados" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-archive me-2"></i>
+                        Chamados Arquivados
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Equipamento</th>
+                                    <th>Patrimônio</th>
+                                    <th>Local</th>
+                                    <th>Status</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabelaArquivados">
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted py-4">
+                                        <i class="fas fa-archive me-2"></i>
+                                        Nenhum chamado arquivado
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                    <button type="button" class="btn btn-warning" onclick="restaurarTodosArquivados()">
+                        <i class="fas fa-undo me-1"></i>Restaurar Todos
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        const API_URL = 'http://localhost:5000/api';
+        let chamados = [];
+        let chamadosArquivados = [];
+
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM carregado, iniciando...');
+            verificarAuth();
+            carregarUsuario();
+            carregarChamados();
+            inicializarDragAndDrop();
+            
+            const arquivados = localStorage.getItem('chamadosArquivados');
+            if (arquivados) {
+                chamadosArquivados = JSON.parse(arquivados);
+                console.log('Arquivados carregados:', chamadosArquivados);
+            }
+        });
+
+        function verificarAuth() {
+            const token = localStorage.getItem('token');
+            console.log('Token:', token ? 'presente' : 'ausente');
+            if (!token) {
+                window.location.href = '/login';
+                return false;
+            }
+            return true;
+        }
+
+        function carregarUsuario() {
+            const usuario = JSON.parse(localStorage.getItem('usuario') || '{}');
+            console.log('Usuário:', usuario);
+            if (usuario.nome_completo) {
+                document.getElementById('userNameDisplay').textContent = usuario.nome_completo;
+            }
+        }
+
+        async function carregarChamados() {
+            const token = localStorage.getItem('token');
+            if (!token) return;
+
+            try {
+                console.log('Buscando chamados da API...');
+                const response = await fetch(`${API_URL}/equipamentos`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (response.status === 401) {
+                    console.log('Token inválido, redirecionando...');
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('usuario');
+                    window.location.href = '/login';
+                    return;
+                }
+
+                const data = await response.json();
+                console.log('Dados recebidos:', data);
+                
+                chamados = Array.isArray(data) ? data : (data.equipamentos || []);
+                console.log('Chamados processados:', chamados);
+                
+                renderizarKanban();
+                
+            } catch (error) {
+                console.error('Erro ao carregar chamados:', error);
+                mostrarToast('Erro ao carregar chamados', 'error');
+            }
+        }
+
+        function renderizarKanban() {
+            console.log('========== RENDERIZANDO KANBAN ==========');
+            console.log('Total de chamados:', chamados.length);
+            console.log('Chamados arquivados:', chamadosArquivados);
+            
+            const colunas = {
+                entrada: document.getElementById('entrada'),
+                manutencao: document.getElementById('manutencao'),
+                pronto: document.getElementById('pronto'),
+                entregue: document.getElementById('entregue')
+            };
+
+            // Limpar colunas
+            Object.values(colunas).forEach(col => {
+                if (col) col.innerHTML = '';
+            });
+
+            const counts = { entrada: 0, manutencao: 0, pronto: 0, entregue: 0 };
+
+            chamados.forEach(chamado => {
+                // Verificar se está arquivado
+                if (chamadosArquivados.includes(chamado.id)) {
+                    console.log(`Chamado ${chamado.id} arquivado, ignorando`);
+                    return;
+                }
+                
+                counts[chamado.status]++;
+                const card = criarCard(chamado);
+                
+                if (colunas[chamado.status]) {
+                    colunas[chamado.status].appendChild(card);
+                }
+            });
+
+            // Atualizar contadores
+            document.getElementById('count-entrada').textContent = counts.entrada;
+            document.getElementById('count-manutencao').textContent = counts.manutencao;
+            document.getElementById('count-pronto').textContent = counts.pronto;
+            document.getElementById('count-entregue').textContent = counts.entregue;
+            
+            console.log('Contadores:', counts);
+            console.log('========== FIM RENDERIZAÇÃO ==========');
+        }
+
+        function criarCard(chamado) {
+            const div = document.createElement('div');
+            div.className = `task-card ${chamado.status}`;
+            div.setAttribute('data-id', chamado.id);
+            div.setAttribute('data-status', chamado.status);
+            
+            // TODOS os cards são arrastáveis (inclusive entregue)
+            div.setAttribute('draggable', 'true');
+            
+            // Montar HTML do card
+            div.innerHTML = `
+                <div class="drag-handle"><i class="fas fa-grip-vertical"></i></div>
+                <div class="task-header">
+                    <span class="task-id">#${chamado.id}</span>
+                    <span class="task-priority priority-${chamado.prioridade}">${chamado.prioridade}</span>
+                </div>
+                <div class="task-title">${chamado.tipo_equipamento || 'Equipamento'} - ${chamado.patrimonio || 'Sem patrimônio'}</div>
+                <div class="task-desc">${chamado.defeito ? chamado.defeito.substring(0, 50) + (chamado.defeito.length > 50 ? '...' : '') : 'Sem descrição'}</div>
+                <div class="task-footer">
+                    <span><i class="fas fa-map-marker-alt"></i> ${chamado.local || 'Sem local'}</span>
+                    <span><i class="fas fa-user"></i> ${chamado.criador_nome || 'Sistema'}</span>
+                </div>
+                <div class="task-actions">
+                    <button class="btn-edit" onclick="editarChamado(${chamado.id})">
+    <i class="fas fa-edit"></i>
+</button>
+                    <button class="btn-delete" onclick="deletarChamado(${chamado.id})">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            `;
+
+            // Adicionar eventos de drag para todos os cards
+            div.addEventListener('dragstart', handleDragStart);
+            div.addEventListener('dragend', handleDragEnd);
+            
+            return div;
+        }
+
+        function inicializarDragAndDrop() {
+            const colunas = document.querySelectorAll('.kanban-column');
+            colunas.forEach(coluna => {
+                coluna.addEventListener('dragover', handleDragOver);
+                coluna.addEventListener('dragleave', handleDragLeave);
+                coluna.addEventListener('drop', handleDrop);
+            });
+            console.log('Drag and drop inicializado');
+        }
+
+        function handleDragStart(e) {
+            this.classList.add('dragging');
+            e.dataTransfer.setData('text/plain', this.dataset.id);
+            e.dataTransfer.effectAllowed = 'move';
+        }
+
+        function handleDragEnd(e) {
+            this.classList.remove('dragging');
+            document.querySelectorAll('.kanban-column').forEach(col => {
+                col.classList.remove('drag-over');
+            });
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            this.classList.add('drag-over');
+        }
+
+        function handleDragLeave(e) {
+            this.classList.remove('drag-over');
+        }
+
+        async function handleDrop(e) {
+            e.preventDefault();
+            this.classList.remove('drag-over');
+            
+            const cardId = e.dataTransfer.getData('text/plain');
+            const novoStatus = this.dataset.status;
+            const chamado = chamados.find(c => c.id == cardId);
+            
+            if (!chamado) {
+                console.log('Chamado não encontrado:', cardId);
+                return;
+            }
+            
+            if (chamado.status === novoStatus) {
+                console.log('Mesmo status, ignorando');
+                return;
+            }
+            
+            console.log(`Movendo chamado ${cardId} de ${chamado.status} para ${novoStatus}`);
+            
+            const token = localStorage.getItem('token');
+            try {
+                const response = await fetch(`${API_URL}/equipamentos/${cardId}/mover`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ status: novoStatus })
+                });
+                
+                if (response.ok) {
+                    // Atualizar status no array local
+                    chamado.status = novoStatus;
+                    
+                    // Re-renderizar o Kanban
+                    renderizarKanban();
+                    
+                    mostrarToast('Chamado movido com sucesso!', 'success');
+                } else {
+                    const data = await response.json();
+                    mostrarToast(data.erro || 'Erro ao mover', 'error');
+                }
+            } catch (error) {
+                console.error('Erro:', error);
+                mostrarToast('Erro ao mover chamado', 'error');
+            }
+        }
+
+       function editarChamado(id) {
+    window.location.href = `/editar-chamado?id=${id}`;
+}
+
+        async function deletarChamado(id) {
+            if (!confirm('Tem certeza que deseja deletar este chamado?')) return;
+            
+            const token = localStorage.getItem('token');
+            try {
+                const response = await fetch(`${API_URL}/equipamentos/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    chamados = chamados.filter(c => c.id !== id);
+                    // Se o chamado estava arquivado, remover também da lista de arquivados
+                    if (chamadosArquivados.includes(id)) {
+                        chamadosArquivados = chamadosArquivados.filter(arquivadoId => arquivadoId !== id);
+                        localStorage.setItem('chamadosArquivados', JSON.stringify(chamadosArquivados));
+                    }
+                    renderizarKanban();
+                    mostrarToast('Chamado deletado!', 'success');
+                } else {
+                    const data = await response.json();
+                    mostrarToast(data.erro || 'Erro ao deletar', 'error');
+                }
+            } catch (error) {
+                console.error('Erro:', error);
+                mostrarToast('Erro ao deletar', 'error');
+            }
+        }
+
+        function arquivarEntregues() {
+            const entregues = chamados.filter(c => c.status === 'entregue' && !chamadosArquivados.includes(c.id));
+            
+            if (entregues.length === 0) {
+                mostrarToast('Nenhum chamado entregue para arquivar', 'info');
+                return;
+            }
+            
+            // Listar os chamados que serão arquivados
+            let listaChamados = '';
+            entregues.forEach(c => {
+                listaChamados += `\n   #${c.id} - ${c.tipo_equipamento} (${c.patrimonio})`;
+            });
+            
+            const mensagem = `📦 ARQUIVAR CHAMADOS?\n\n` +
+                            `Isso vai remover ${entregues.length} chamado(s) do Kanban:\n` +
+                            `${listaChamados}\n\n` +
+                            `❓ Deseja continuar?\n` +
+                            `(Eles ainda estarão nos relatórios e podem ser restaurados)`;
+            
+            if (!confirm(mensagem)) {
+                return;
+            }
+            
+            // Adicionar IDs ao array de arquivados
+            entregues.forEach(c => {
+                chamadosArquivados.push(c.id);
+            });
+            
+            // Salvar no localStorage
+            localStorage.setItem('chamadosArquivados', JSON.stringify(chamadosArquivados));
+            
+            // Re-renderizar
+            renderizarKanban();
+            
+            mostrarToast(`${entregues.length} chamado(s) arquivado(s)!`, 'success');
+        }
+
+        function abrirModalArquivados() {
+            const arquivados = chamados.filter(c => chamadosArquivados.includes(c.id));
+            const tbody = document.getElementById('tabelaArquivados');
+            
+            if (arquivados.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4"><i class="fas fa-archive me-2"></i>Nenhum chamado arquivado</td></tr>';
+            } else {
+                tbody.innerHTML = arquivados.map(c => `
+                    <tr>
+                        <td><strong>#${c.id}</strong></td>
+                        <td>${c.tipo_equipamento}</td>
+                        <td>${c.patrimonio}</td>
+                        <td>${c.local || '-'}</td>
+                        <td><span class="badge bg-secondary">${c.status}</span></td>
+                        <td>
+                            <button class="btn btn-sm btn-warning" onclick="restaurarChamado(${c.id})">
+                                <i class="fas fa-undo"></i> Restaurar
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+            
+            new bootstrap.Modal(document.getElementById('modalArquivados')).show();
+        }
+
+        function restaurarChamado(id) {
+            chamadosArquivados = chamadosArquivados.filter(arquivadoId => arquivadoId !== id);
+            localStorage.setItem('chamadosArquivados', JSON.stringify(chamadosArquivados));
+            renderizarKanban();
+            
+            // Atualizar o modal se estiver aberto
+            const modal = bootstrap.Modal.getInstance(document.getElementById('modalArquivados'));
+            if (modal) {
+                abrirModalArquivados(); // Recarrega o modal com a lista atualizada
+            }
+            
+            mostrarToast(`Chamado #${id} restaurado!`, 'success');
+        }
+
+        function restaurarTodosArquivados() {
+            if (chamadosArquivados.length === 0) {
+                mostrarToast('Nenhum chamado para restaurar', 'info');
+                return;
+            }
+            
+            if (confirm(`Restaurar todos os ${chamadosArquivados.length} chamados arquivados?`)) {
+                chamadosArquivados = [];
+                localStorage.removeItem('chamadosArquivados');
+                renderizarKanban();
+                
+                // Fechar o modal se estiver aberto
+                const modal = bootstrap.Modal.getInstance(document.getElementById('modalArquivados'));
+                if (modal) {
+                    modal.hide();
+                }
+                
+                mostrarToast('Todos os chamados restaurados!', 'success');
+            }
+        }
+
+        function mostrarToast(mensagem, tipo) {
+            const toast = document.getElementById('toast');
+            toast.textContent = mensagem;
+            toast.className = `toast-notification ${tipo}`;
+            toast.style.display = 'block';
+            setTimeout(() => {
+                toast.style.display = 'none';
+            }, 3000);
+        }
+
+        function logout() {
+            if (confirm('Deseja realmente sair?')) {
+                localStorage.removeItem('token');
+                localStorage.removeItem('usuario');
+                localStorage.removeItem('chamadosArquivados');
+                window.location.href = '/login';
+            }
+        }
+    </script>
+</body>
+</html>

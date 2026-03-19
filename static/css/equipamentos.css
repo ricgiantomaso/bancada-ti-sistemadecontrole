@@ -1,0 +1,129 @@
+.pagina-equipamento {
+    background: #f0f2f5;
+    min-height: 100vh;
+}
+
+.form-card {
+    max-width: 1200px;
+    margin: 20px auto;
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    border: none;
+}
+
+.card-title {
+    color: #1e3c72;
+    font-weight: 700;
+    font-size: 1.8rem;
+    margin-bottom: 30px;
+}
+
+.form-label {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 8px;
+}
+
+.form-control, .form-select {
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    padding: 10px 15px;
+    transition: all 0.3s;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: #2a5298;
+    box-shadow: 0 0 0 3px rgba(42,82,152,0.1);
+}
+
+textarea.form-control {
+    min-height: 100px;
+    resize: vertical;
+}
+
+/* Preview Card */
+.preview-card {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    border-left: 4px solid #2a5298;
+    margin-top: 10px;
+}
+
+.card-header-kanban {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.ticket-id {
+    font-size: 0.85rem;
+    color: #6c757d;
+    font-weight: 600;
+}
+
+.card-title-kanban {
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.card-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.info-item {
+    font-size: 0.9rem;
+    color: #666;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.info-item i {
+    width: 20px;
+    color: #2a5298;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+    border: none;
+    padding: 10px 25px;
+    border-radius: 10px;
+    font-weight: 600;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(42,82,152,0.3);
+}
+
+.btn-secondary {
+    background: #6c757d;
+    border: none;
+    padding: 10px 25px;
+    border-radius: 10px;
+}
+
+/* Badges de prioridade */
+.badge.bg-success { background: #28a745; }
+.badge.bg-secondary { background: #6c757d; }
+.badge.bg-warning { background: #ffc107; color: #212529; }
+.badge.bg-danger { background: #dc3545; }
+
+/* Responsividade */
+@media (max-width: 768px) {
+    .form-card {
+        margin: 10px;
+    }
+    
+    .preview-card {
+        margin-top: 20px;
+    }
+}

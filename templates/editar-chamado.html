@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editar Chamado - Bancada TI</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <!-- Select2 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+        }
+
+        .navbar {
+            background: linear-gradient(135deg, #5a67d8 0%, #6b46a0 100%) !important;
+            padding: 12px 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .navbar-brand {
+            font-size: 1.5rem;
+            letter-spacing: 1px;
+            color: white !important;
+            font-weight: 700;
+        }
+
+        .nav-link {
+            font-size: 0.95rem;
+            padding: 8px 15px !important;
+            border-radius: 8px;
+            transition: all 0.3s;
+            margin: 0 3px;
+            color: rgba(255,255,255,0.9) !important;
+        }
+
+        .nav-link:hover {
+            background: rgba(255,255,255,0.2);
+            color: white !important;
+        }
+
+        .nav-link.active {
+            background: rgba(255,255,255,0.25);
+            color: white !important;
+            font-weight: 600;
+        }
+
+        .form-container {
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+
+        .form-card {
+            background: white !important;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+            padding: 30px;
+            border: none;
+        }
+
+        .card-title {
+            color: #4a5568;
+            font-weight: 700;
+            font-size: 1.8rem;
+            margin-bottom: 30px;
+            text-align: center;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 20px;
+        }
+
+        .form-label {
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 8px;
+        }
+
+        .form-control, .form-select {
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 12px 15px;
+            transition: all 0.3s;
+            background: white;
+            color: #1a202c;
+        }
+
+        .form-control:focus, .form-select:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            outline: none;
+        }
+
+        .form-control:disabled {
+            background: #f7fafc;
+            color: #718096;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            padding: 12px 25px;
+            border-radius: 10px;
+            font-weight: 600;
+            color: white;
+            transition: all 0.3s;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: #718096;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 10px;
+            font-weight: 600;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #4a5568;
+        }
+
+        .btn-warning {
+            background: #ed8936;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 10px;
+            font-weight: 600;
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background: #dd6b20;
+        }
+
+        .btn-danger {
+            background: #f56565;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 10px;
+            font-weight: 600;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #e53e3e;
+        }
+
+        .info-box {
+            background: #f7fafc;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+
+        .info-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #4a5568;
+            min-width: 120px;
+        }
+
+        .info-value {
+            color: #2d3748;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading.visible {
+            display: block;
+        }
+
+        .loading::after {
+            content: '';
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            border: 3px solid #e2e8f0;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .toast-notification {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            padding: 15px 25px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            display: none;
+            z-index: 9999;
+            animation: slideIn 0.3s;
+            border-left: 4px solid;
+        }
+
+        .toast-notification.success { border-left-color: #48bb78; }
+        .toast-notification.error { border-left-color: #f56565; }
+        .toast-notification.info { border-left-color: #667eea; }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0%); opacity: 1; }
+        }
+
+        /* Select2 Customização */
+        .select2-container--default .select2-selection--single {
+            height: 46px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 8px 12px;
+        }
+        
+        .select2-container--default .select2-selection--single .select2-selection__rendered {
+            line-height: 28px;
+            color: #1a202c;
+        }
+        
+        .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 42px;
+        }
+        
+        .select2-dropdown {
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .select2-search__field {
+            border: 2px solid #e2e8f0 !important;
+            border-radius: 8px !important;
+            padding: 8px !important;
+        }
+        
+        .unidade-telefone {
+            font-size: 0.85rem;
+            color: #718096;
+            margin-left: 10px;
+        }
+        .select2-results__option--highlighted .unidade-telefone {
+            color: rgba(255,255,255,0.8);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .status-entrada { background: #4299e1; color: white; }
+        .status-manutencao { background: #f6ad55; color: white; }
+        .status-pronto { background: #48bb78; color: white; }
+        .status-entregue { background: #a0aec0; color: white; }
+
+        .priority-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .priority-baixa { background: #48bb78; color: white; }
+        .priority-media { background: #a0aec0; color: white; }
+        .priority-alta { background: #f6ad55; color: white; }
+        .priority-urgente { background: #f56565; color: white; animation: pulse 1s infinite; }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div id="toast" class="toast-notification"></div>
+
+    <!-- HEADER -->
+    <nav class="navbar navbar-expand-lg fixed-top shadow-sm">
+        <div class="container-fluid">
+            <a class="navbar-brand fw-semibold" href="/dashboard">
+                <i class="fas fa-tools me-2"></i>🔧 Bancada TI
+            </a>
+
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#menuSistema">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="menuSistema">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/equipamento/cadastro">
+                            <i class="fas fa-desktop me-1"></i>Cadastrar Equipamento
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/usuario/cadastro">
+                            <i class="fas fa-user-plus me-1"></i>Cadastrar Usuário
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/quadro-chamados">
+                            <i class="fas fa-clipboard-list me-1"></i>Lista
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/relatorios">
+                            <i class="fas fa-chart-bar me-1"></i>Relatórios
+                        </a>
+                    </li>
+                     <li class="nav-item">
+                        <a class="nav-link" href="/logs">
+                            <i class="fas fa-chart-bar me-1"></i>Logs
+                        </a>
+                    </li>
+                </ul>
+
+                <div class="d-flex align-items-center gap-3">
+                    <span class="text-light small">
+                        <i class="fas fa-user-circle me-1"></i>
+                        <span id="userNameDisplay">Carregando...</span>
+                    </span>
+                    <button onclick="logout()" class="btn btn-outline-light btn-sm">
+                        <i class="fas fa-sign-out-alt me-1"></i>Sair
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div style="margin-top: 80px;"></div>
+
+    <!-- CONTEÚDO PRINCIPAL -->
+    <div class="form-container">
+        <div class="form-card">
+            <h4 class="card-title">
+                <i class="fas fa-edit me-2"></i>
+                Editar Chamado <span id="chamadoId" class="text-muted"></span>
+            </h4>
+
+            <!-- Loading -->
+            <div id="loading" class="loading">Carregando dados do chamado...</div>
+
+            <!-- Formulário de edição -->
+            <form id="formEditar" style="display: none;">
+                <!-- Informações fixas -->
+                <div class="info-box">
+                    <h5 class="mb-3"><i class="fas fa-info-circle me-2"></i>Informações do Chamado</h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="info-item">
+                                <span class="info-label">Data de Entrada:</span>
+                                <span class="info-value" id="displayDataEntrada">-</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Criado por:</span>
+                                <span class="info-value" id="displayCriador">-</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Patrimônio:</span>
+                                <span class="info-value" id="displayPatrimonio">-</span>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="info-item">
+                                <span class="info-label">Status atual:</span>
+                                <span class="info-value" id="displayStatus">-</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Prioridade:</span>
+                                <span class="info-value" id="displayPrioridade">-</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Unidade:</span>
+                                <span class="info-value" id="displayLocal">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">
+                                <i class="fas fa-map-marker-alt me-1"></i> Unidade
+                            </label>
+                            <select class="form-control select2-unidade" id="local" required style="width: 100%;">
+                                <option value="">Carregando unidades...</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Tipo de Equipamento</label>
+                            <select class="form-select" id="tipoEquipamento" required>
+                         <option value="">Selecione</option>
+                                <option value="notebook">Acessórios</option>
+                                <option value="desktop">Computador</option>
+                                <option value="impressora">Impressora</option>
+                                <option value="monitor">Monitor</option>
+                                <option value="tablet">No Break</option>
+                                <option value="celular">Olostech</option>
+                                <option value="roteador">Painel e Totem</option>
+                                <option value="outro">Tablet</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Status</label>
+                            <select class="form-select" id="status" required>
+                                <option value="entrada">Entrada</option>
+                                <option value="manutencao">Em Manutenção</option>
+                                <option value="pronto">Pronto</option>
+                                <option value="entregue">Entregue</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">Defeito Relatado</label>
+                            <textarea class="form-control" id="defeito" rows="3" required></textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Observações</label>
+                            <textarea class="form-control" id="observacoes" rows="3"></textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Prioridade</label>
+                            <select class="form-select" id="prioridade" required>
+                                <option value="baixa">Baixa</option>
+                                <option value="media">Média</option>
+                                <option value="alta">Alta</option>
+                                <option value="urgente">Urgente</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Botões -->
+                <div class="d-flex justify-content-between mt-4">
+                    <div>
+                        <a href="/quadro-chamados" class="btn btn-secondary me-2">
+                            <i class="fas fa-arrow-left me-2"></i>Voltar para Lista
+                        </a>
+                        <button type="button" class="btn btn-warning" onclick="window.location.href='/dashboard'">
+                            <i class="fas fa-columns me-2"></i>Ver Kanban
+                        </button>
+                    </div>
+                    <div>
+                        <button type="button" class="btn btn-danger me-2" onclick="deletarChamado()">
+                            <i class="fas fa-trash me-2"></i>Deletar
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-2"></i>Salvar Alterações
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Scripts na ordem correta -->
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    
+    <script>
+        const API_URL = 'http://localhost:5000/api';
+        let chamadoId = null;
+        let chamadoOriginal = null;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM carregado');
+            verificarAuth();
+            carregarUsuario();
+            
+            // Pegar ID da URL
+            const urlParams = new URLSearchParams(window.location.search);
+            chamadoId = urlParams.get('id');
+            
+            if (chamadoId) {
+                document.getElementById('chamadoId').textContent = `#${chamadoId}`;
+                carregarChamado();
+            } else {
+                mostrarToast('ID do chamado não fornecido', 'error');
+                setTimeout(() => {
+                    window.location.href = '/quadro-chamados';
+                }, 2000);
+            }
+        });
+
+        function verificarAuth() {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                window.location.href = '/login';
+                return false;
+            }
+            return true;
+        }
+
+        function carregarUsuario() {
+            const usuario = JSON.parse(localStorage.getItem('usuario') || '{}');
+            if (usuario.nome_completo) {
+                document.getElementById('userNameDisplay').textContent = usuario.nome_completo;
+            }
+        }
+
+        async function carregarChamado() {
+            const token = localStorage.getItem('token');
+            if (!token) return;
+
+            const loading = document.getElementById('loading');
+            const form = document.getElementById('formEditar');
+            
+            loading.classList.add('visible');
+            form.style.display = 'none';
+
+            try {
+                const response = await fetch(`${API_URL}/equipamentos/${chamadoId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (response.status === 401) {
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('usuario');
+                    window.location.href = '/login';
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error('Chamado não encontrado');
+                }
+
+                const chamado = await response.json();
+                chamadoOriginal = chamado;
+                
+                await carregarUnidades(chamado.local);
+                preencherFormulario(chamado);
+                
+                loading.classList.remove('visible');
+                form.style.display = 'block';
+                
+            } catch (error) {
+                console.error('Erro:', error);
+                mostrarToast('Erro ao carregar chamado', 'error');
+                setTimeout(() => {
+                    window.location.href = '/quadro-chamados';
+                }, 2000);
+            }
+        }
+
+        async function carregarUnidades(valorSelecionado = null) {
+            const token = localStorage.getItem('token');
+            const select = $('#local');
+            
+            try {
+                const response = await fetch(`${API_URL}/unidades`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    const unidades = await response.json();
+                    
+                    select.empty().append('<option value="">Selecione uma unidade</option>');
+                    
+                    unidades.forEach(unidade => {
+                        const option = new Option(
+                            unidade.nome + (unidade.telefone ? ` (${unidade.telefone})` : ''),
+                            unidade.nome,
+                            false, false
+                        );
+                        $(option).data('telefone', unidade.telefone);
+                        select.append(option);
+                    });
+                    
+                    select.select2({
+                        placeholder: "Digite para buscar uma unidade...",
+                        allowClear: true,
+                        width: '100%',
+                        templateResult: formatarUnidade,
+                        templateSelection: formatarUnidadeSelecionada,
+                        language: {
+                            noResults: function() { return "Nenhuma unidade encontrada"; }
+                        }
+                    });
+                    
+                    if (valorSelecionado) {
+                        select.val(valorSelecionado).trigger('change');
+                    }
+                }
+            } catch (error) {
+                console.error('Erro ao carregar unidades:', error);
+            }
+        }
+
+        function formatarUnidade(unidade) {
+            if (!unidade.id) return unidade.text;
+            const telefone = $(unidade.element).data('telefone');
+            if (telefone) {
+                return $('<span><strong>' + unidade.text.replace(` (${telefone})`, '') + '</strong> <span class="unidade-telefone">' + telefone + '</span></span>');
+            }
+            return unidade.text;
+        }
+
+        function formatarUnidadeSelecionada(unidade) {
+            return unidade.text;
+        }
+
+        function preencherFormulario(chamado) {
+            document.getElementById('displayDataEntrada').textContent = 
+                new Date(chamado.data_entrada).toLocaleDateString('pt-BR');
+            document.getElementById('displayCriador').textContent = 
+                chamado.criador_nome || 'Sistema';
+            document.getElementById('displayPatrimonio').textContent = 
+                chamado.patrimonio || '-';
+            document.getElementById('displayLocal').textContent = 
+                chamado.local || '-';
+            
+            document.getElementById('displayStatus').innerHTML = 
+                getStatusBadge(chamado.status);
+            document.getElementById('displayPrioridade').innerHTML = 
+                getPrioridadeBadge(chamado.prioridade);
+            
+            document.getElementById('tipoEquipamento').value = chamado.tipo_equipamento || '';
+            document.getElementById('status').value = chamado.status || 'entrada';
+            document.getElementById('defeito').value = chamado.defeito || '';
+            document.getElementById('observacoes').value = chamado.observacoes || '';
+            document.getElementById('prioridade').value = chamado.prioridade || 'media';
+        }
+
+        function getStatusBadge(status) {
+            const classes = {
+                'entrada': 'status-entrada',
+                'manutencao': 'status-manutencao',
+                'pronto': 'status-pronto',
+                'entregue': 'status-entregue'
+            };
+            const textos = {
+                'entrada': 'Entrada',
+                'manutencao': 'Em Manutenção',
+                'pronto': 'Pronto',
+                'entregue': 'Entregue'
+            };
+            return `<span class="status-badge ${classes[status] || ''}">${textos[status] || status}</span>`;
+        }
+
+        function getPrioridadeBadge(prioridade) {
+            const classes = {
+                'baixa': 'priority-baixa',
+                'media': 'priority-media',
+                'alta': 'priority-alta',
+                'urgente': 'priority-urgente'
+            };
+            const textos = {
+                'baixa': 'Baixa',
+                'media': 'Média',
+                'alta': 'Alta',
+                'urgente': 'Urgente'
+            };
+            return `<span class="priority-badge ${classes[prioridade] || ''}">${textos[prioridade] || prioridade}</span>`;
+        }
+
+        document.getElementById('formEditar').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const token = localStorage.getItem('token');
+            if (!token) return;
+            
+            if (!confirm('Salvar alterações neste chamado?')) {
+                return;
+            }
+            
+            const dadosAtualizados = {
+                local: document.getElementById('local').value,
+                tipo_equipamento: document.getElementById('tipoEquipamento').value,
+                status: document.getElementById('status').value,
+                defeito: document.getElementById('defeito').value,
+                observacoes: document.getElementById('observacoes').value,
+                prioridade: document.getElementById('prioridade').value
+            };
+            
+            const btnSubmit = document.querySelector('button[type="submit"]');
+            btnSubmit.disabled = true;
+            btnSubmit.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Salvando...';
+            
+            try {
+                const response = await fetch(`${API_URL}/equipamentos/${chamadoId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(dadosAtualizados)
+                });
+                
+                if (response.ok) {
+                    mostrarToast('Chamado atualizado com sucesso!', 'success');
+                    setTimeout(() => {
+                        window.location.href = '/quadro-chamados';
+                    }, 2000);
+                } else {
+                    const data = await response.json();
+                    mostrarToast(data.erro || 'Erro ao atualizar', 'error');
+                    btnSubmit.disabled = false;
+                    btnSubmit.innerHTML = '<i class="fas fa-save me-2"></i>Salvar Alterações';
+                }
+            } catch (error) {
+                console.error('Erro:', error);
+                mostrarToast('Erro ao conectar com servidor', 'error');
+                btnSubmit.disabled = false;
+                btnSubmit.innerHTML = '<i class="fas fa-save me-2"></i>Salvar Alterações';
+            }
+        });
+
+        async function deletarChamado() {
+            if (!confirm('Tem certeza que deseja deletar este chamado? Esta ação não pode ser desfeita.')) {
+                return;
+            }
+            
+            const token = localStorage.getItem('token');
+            
+            try {
+                const response = await fetch(`${API_URL}/equipamentos/${chamadoId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    mostrarToast('Chamado deletado com sucesso!', 'success');
+                    setTimeout(() => {
+                        window.location.href = '/quadro-chamados';
+                    }, 2000);
+                } else {
+                    const data = await response.json();
+                    mostrarToast(data.erro || 'Erro ao deletar', 'error');
+                }
+            } catch (error) {
+                console.error('Erro:', error);
+                mostrarToast('Erro ao conectar com servidor', 'error');
+            }
+        }
+
+        function mostrarToast(mensagem, tipo) {
+            const toast = document.getElementById('toast');
+            toast.textContent = mensagem;
+            toast.className = `toast-notification ${tipo}`;
+            toast.style.display = 'block';
+            setTimeout(() => {
+                toast.style.display = 'none';
+            }, 3000);
+        }
+
+        function logout() {
+            if (confirm('Deseja realmente sair?')) {
+                localStorage.removeItem('token');
+                localStorage.removeItem('usuario');
+                window.location.href = '/login';
+            }
+        }
+    </script>
+</body>
+</html>

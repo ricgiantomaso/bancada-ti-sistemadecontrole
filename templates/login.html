@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Login - Sistema de Chamados</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <style>
+        body.pagina-login {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .login-wrapper {
+            width: 100%;
+            max-width: 420px;
+            margin: 0 auto;
+        }
+
+        .login-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(102, 126, 234, 0.3);
+            padding: 40px 35px;
+            animation: slideIn 0.5s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .login-title {
+            color: #667eea;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .login-subtitle {
+            color: #666;
+            font-size: 15px;
+            margin-bottom: 30px;
+            text-align: center;
+            border-bottom: 1px solid rgba(102, 126, 234, 0.2);
+            padding-bottom: 20px;
+        }
+
+        .form-label {
+            color: #555;
+            font-weight: 600;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+
+        .form-control {
+            border: 2px solid rgba(102, 126, 234, 0.2);
+            border-radius: 12px;
+            padding: 12px 15px;
+            font-size: 15px;
+            transition: all 0.3s;
+            background: white;
+        }
+
+        .form-control:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            outline: none;
+        }
+
+        .btn-login {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 10px;
+        }
+
+        .btn-login:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+
+        .erro-login {
+            color: #f5576c;
+            font-size: 14px;
+            margin: 15px 0;
+            text-align: center;
+            background: rgba(245, 87, 108, 0.1);
+            padding: 10px;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .info-dev {
+            text-align: center;
+            margin-top: 20px;
+            color: rgba(255,255,255,0.8);
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body class="pagina-login">
+    <div class="login-wrapper">
+        <div class="login-card">
+            <h2 class="login-title">
+                Sistema de Chamados
+            </h2>
+            <p class="login-subtitle">
+                Acesso ao painel técnico
+            </p>
+
+            <form id="loginForm">
+                <div class="mb-3">
+                    <label class="form-label">Email ou Usuário</label>
+                    <input type="text" class="form-control" id="usuario" placeholder="Digite seu email ou usuário" required autofocus>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Senha</label>
+                    <input type="password" class="form-control" id="senha" placeholder="Digite sua senha" required>
+                </div>
+
+                <div id="erroLogin" class="erro-login"></div>
+
+                <button type="submit" class="btn btn-login">
+                    Entrar no Sistema
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="info-dev">
+        <p>Use: <strong>admin</strong> / <strong>admin</strong></p>
+    </div>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const usuario = document.getElementById('usuario').value;
+            const senha = document.getElementById('senha').value;
+            const erroDiv = document.getElementById('erroLogin');
+            
+            try {
+                const response = await fetch('http://localhost:5000/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ usuario, senha })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    localStorage.setItem('token', data.token);
+                    localStorage.setItem('usuario', JSON.stringify(data.usuario));
+                    window.location.href = '/dashboard';
+                } else {
+                    erroDiv.textContent = '❌ ' + (data.erro || 'Erro no login');
+                    erroDiv.style.display = 'block';
+                }
+            } catch (error) {
+                erroDiv.textContent = '❌ Erro de conexão';
+                erroDiv.style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>
