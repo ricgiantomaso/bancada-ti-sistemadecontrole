@@ -123,7 +123,6 @@
             position: relative;
             user-select: none;
             border: 1px solid #e2e8f0;
-            cursor: grab;
         }
 
         .task-card:active {
@@ -216,6 +215,12 @@
             transition: all 0.3s;
         }
 
+        .task-actions button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
         .btn-edit {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -233,6 +238,10 @@
             color: #94a3b8;
             cursor: grab;
             font-size: 1rem;
+        }
+
+        .drag-handle:active {
+            cursor: grabbing;
         }
 
         .count {
@@ -288,6 +297,53 @@
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: rgba(255,255,255,0.1); border-radius: 4px; }
         ::-webkit-scrollbar-thumb { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 4px; }
+
+        /* ========== NOVOS ESTILOS PARA RESPONSÁVEL ========== */
+        .task-responsavel {
+            font-size: 0.8rem;
+            color: #4a5568;
+            margin: 8px 0;
+            padding: 5px;
+            background: #edf2f7;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .responsavel-nome {
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .btn-assign {
+            background: #4299e1;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-assign:hover {
+            background: #3182ce;
+        }
+
+        .task-card[data-responsavel=""] .task-responsavel {
+            background: #fed7d7;
+            color: #c53030;
+        }
+
+        .task-card[draggable="false"] {
+            opacity: 0.9;
+            border-left-width: 6px;
+        }
+
+        .task-card[draggable="false"] .drag-handle {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -317,6 +373,11 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link active" href="/dashboard">
+                            <i class="fas fa-columns me-1"></i>Kanban
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="/quadro-chamados">
                             <i class="fas fa-clipboard-list me-1"></i>Lista
                         </a>
@@ -326,9 +387,9 @@
                             <i class="fas fa-chart-bar me-1"></i>Relatórios
                         </a>
                     </li>
-                     <li class="nav-item">
+                    <li class="nav-item">
                         <a class="nav-link" href="/logs">
-                            <i class="fas fa-chart-bar me-1"></i>Logs
+                            <i class="fas fa-history me-1"></i>Logs
                         </a>
                     </li>
                 </ul>
@@ -440,19 +501,58 @@
         </div>
     </div>
 
+    <!-- ========== MODAL DE ATRIBUIÇÃO DE RESPONSÁVEL ========== -->
+    <div class="modal fade" id="modalAtribuir" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-user-tag me-2"></i>
+                        Atribuir Chamado
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="atribuirChamadoId">
+                    <div class="mb-3">
+                        <label class="form-label">Responsável atual</label>
+                        <input type="text" class="form-control" id="responsavelAtual" disabled>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Atribuir para</label>
+                        <select class="form-select" id="novoResponsavel">
+                            <option value="">Carregando técnicos...</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" onclick="salvarAtribuicao()">
+                        <i class="fas fa-save me-2"></i>Salvar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     
     <script>
         const API_URL = 'http://localhost:5000/api';
         let chamados = [];
         let chamadosArquivados = [];
+        let listaUsuarios = [];
+        let socket;
 
         document.addEventListener('DOMContentLoaded', function() {
             console.log('DOM carregado, iniciando...');
             verificarAuth();
             carregarUsuario();
             carregarChamados();
+            carregarUsuarios();
             inicializarDragAndDrop();
+            inicializarSocket();
             
             const arquivados = localStorage.getItem('chamadosArquivados');
             if (arquivados) {
@@ -476,6 +576,34 @@
             console.log('Usuário:', usuario);
             if (usuario.nome_completo) {
                 document.getElementById('userNameDisplay').textContent = usuario.nome_completo;
+            }
+        }
+
+        function inicializarSocket() {
+            try {
+                socket = io('http://localhost:5000');
+                
+                socket.on('connect', function() {
+                    console.log('🟢 Conectado ao servidor');
+                });
+                
+                socket.on('atualizacao_sistema', function(data) {
+                    console.log('📢 Atualização recebida:', data);
+                    
+                    let mensagem = '';
+                    if (data.acao === 'CREATE') mensagem = '🆕 Novo chamado criado!';
+                    else if (data.acao === 'UPDATE') mensagem = '✏️ Chamado atualizado!';
+                    else if (data.acao === 'MOVE') mensagem = '📦 Chamado movido!';
+                    else if (data.acao === 'DELETE') mensagem = '🗑️ Chamado deletado!';
+                    
+                    if (mensagem) {
+                        mostrarToast(mensagem, 'info');
+                    }
+                    
+                    carregarChamados();
+                });
+            } catch (error) {
+                console.error('Erro ao conectar Socket.IO:', error);
             }
         }
 
@@ -511,10 +639,23 @@
             }
         }
 
+        async function carregarUsuarios() {
+            const token = localStorage.getItem('token');
+            try {
+                const response = await fetch(`${API_URL}/usuarios`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (response.ok) {
+                    listaUsuarios = await response.json();
+                    console.log('✅ Usuários carregados:', listaUsuarios.length);
+                }
+            } catch (error) {
+                console.error('Erro ao carregar usuários:', error);
+            }
+        }
+
         function renderizarKanban() {
-            console.log('========== RENDERIZANDO KANBAN ==========');
-            console.log('Total de chamados:', chamados.length);
-            console.log('Chamados arquivados:', chamadosArquivados);
+            console.log('Renderizando Kanban...');
             
             const colunas = {
                 entrada: document.getElementById('entrada'),
@@ -523,7 +664,6 @@
                 entregue: document.getElementById('entregue')
             };
 
-            // Limpar colunas
             Object.values(colunas).forEach(col => {
                 if (col) col.innerHTML = '';
             });
@@ -531,7 +671,6 @@
             const counts = { entrada: 0, manutencao: 0, pronto: 0, entregue: 0 };
 
             chamados.forEach(chamado => {
-                // Verificar se está arquivado
                 if (chamadosArquivados.includes(chamado.id)) {
                     console.log(`Chamado ${chamado.id} arquivado, ignorando`);
                     return;
@@ -545,14 +684,12 @@
                 }
             });
 
-            // Atualizar contadores
             document.getElementById('count-entrada').textContent = counts.entrada;
             document.getElementById('count-manutencao').textContent = counts.manutencao;
             document.getElementById('count-pronto').textContent = counts.pronto;
             document.getElementById('count-entregue').textContent = counts.entregue;
             
             console.log('Contadores:', counts);
-            console.log('========== FIM RENDERIZAÇÃO ==========');
         }
 
         function criarCard(chamado) {
@@ -560,11 +697,17 @@
             div.className = `task-card ${chamado.status}`;
             div.setAttribute('data-id', chamado.id);
             div.setAttribute('data-status', chamado.status);
+            div.setAttribute('data-responsavel', chamado.responsavel_id || '');
             
-            // TODOS os cards são arrastáveis (inclusive entregue)
-            div.setAttribute('draggable', 'true');
+            const usuarioLogado = JSON.parse(localStorage.getItem('usuario') || '{}');
+            const podeMover = !chamado.responsavel_id || chamado.responsavel_id === usuarioLogado.id || chamado.status === 'entrada';
             
-            // Montar HTML do card
+            if (podeMover) {
+                div.setAttribute('draggable', 'true');
+            } else {
+                div.setAttribute('draggable', 'false');
+            }
+            
             div.innerHTML = `
                 <div class="drag-handle"><i class="fas fa-grip-vertical"></i></div>
                 <div class="task-header">
@@ -577,19 +720,27 @@
                     <span><i class="fas fa-map-marker-alt"></i> ${chamado.local || 'Sem local'}</span>
                     <span><i class="fas fa-user"></i> ${chamado.criador_nome || 'Sistema'}</span>
                 </div>
+                <div class="task-responsavel">
+                    <i class="fas fa-user-tag"></i> 
+                    <span class="responsavel-nome">${chamado.responsavel_nome ? '🔨 ' + chamado.responsavel_nome : '📦 Aguardando'}</span>
+                </div>
                 <div class="task-actions">
-                    <button class="btn-edit" onclick="editarChamado(${chamado.id})">
-    <i class="fas fa-edit"></i>
-</button>
-                    <button class="btn-delete" onclick="deletarChamado(${chamado.id})">
+                    <button class="btn-edit" onclick="editarChamado(${chamado.id})" ${!podeMover ? 'disabled' : ''} title="${!podeMover ? 'Apenas o responsável pode editar' : 'Editar'}">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn-assign" onclick="abrirModalAtribuir(${chamado.id})" title="Atribuir/Transferir">
+                        <i class="fas fa-user-plus"></i>
+                    </button>
+                    <button class="btn-delete" onclick="deletarChamado(${chamado.id})" ${usuarioLogado.usuario !== 'admin' ? 'disabled' : ''} title="${usuarioLogado.usuario !== 'admin' ? 'Apenas admin pode deletar' : 'Deletar'}">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
             `;
 
-            // Adicionar eventos de drag para todos os cards
-            div.addEventListener('dragstart', handleDragStart);
-            div.addEventListener('dragend', handleDragEnd);
+            if (podeMover) {
+                div.addEventListener('dragstart', handleDragStart);
+                div.addEventListener('dragend', handleDragEnd);
+            }
             
             return div;
         }
@@ -645,6 +796,14 @@
                 return;
             }
             
+            const usuarioLogado = JSON.parse(localStorage.getItem('usuario') || '{}');
+            
+            // Verificar permissão
+            if (chamado.responsavel_id && chamado.responsavel_id !== usuarioLogado.id && chamado.status !== 'entrada') {
+                mostrarToast(`Apenas ${chamado.responsavel_nome} pode mover este chamado`, 'warning');
+                return;
+            }
+            
             console.log(`Movendo chamado ${cardId} de ${chamado.status} para ${novoStatus}`);
             
             const token = localStorage.getItem('token');
@@ -659,12 +818,13 @@
                 });
                 
                 if (response.ok) {
-                    // Atualizar status no array local
+                    const data = await response.json();
                     chamado.status = novoStatus;
-                    
-                    // Re-renderizar o Kanban
+                    if (data.equipamento.responsavel_nome) {
+                        chamado.responsavel_nome = data.equipamento.responsavel_nome;
+                        chamado.responsavel_id = data.equipamento.responsavel_id;
+                    }
                     renderizarKanban();
-                    
                     mostrarToast('Chamado movido com sucesso!', 'success');
                 } else {
                     const data = await response.json();
@@ -676,9 +836,9 @@
             }
         }
 
-       function editarChamado(id) {
-    window.location.href = `/editar-chamado?id=${id}`;
-}
+        function editarChamado(id) {
+            window.location.href = `/editar-chamado?id=${id}`;
+        }
 
         async function deletarChamado(id) {
             if (!confirm('Tem certeza que deseja deletar este chamado?')) return;
@@ -692,7 +852,6 @@
                 
                 if (response.ok) {
                     chamados = chamados.filter(c => c.id !== id);
-                    // Se o chamado estava arquivado, remover também da lista de arquivados
                     if (chamadosArquivados.includes(id)) {
                         chamadosArquivados = chamadosArquivados.filter(arquivadoId => arquivadoId !== id);
                         localStorage.setItem('chamadosArquivados', JSON.stringify(chamadosArquivados));
@@ -717,7 +876,6 @@
                 return;
             }
             
-            // Listar os chamados que serão arquivados
             let listaChamados = '';
             entregues.forEach(c => {
                 listaChamados += `\n   #${c.id} - ${c.tipo_equipamento} (${c.patrimonio})`;
@@ -733,17 +891,12 @@
                 return;
             }
             
-            // Adicionar IDs ao array de arquivados
             entregues.forEach(c => {
                 chamadosArquivados.push(c.id);
             });
             
-            // Salvar no localStorage
             localStorage.setItem('chamadosArquivados', JSON.stringify(chamadosArquivados));
-            
-            // Re-renderizar
             renderizarKanban();
-            
             mostrarToast(`${entregues.length} chamado(s) arquivado(s)!`, 'success');
         }
 
@@ -778,10 +931,9 @@
             localStorage.setItem('chamadosArquivados', JSON.stringify(chamadosArquivados));
             renderizarKanban();
             
-            // Atualizar o modal se estiver aberto
             const modal = bootstrap.Modal.getInstance(document.getElementById('modalArquivados'));
             if (modal) {
-                abrirModalArquivados(); // Recarrega o modal com a lista atualizada
+                abrirModalArquivados();
             }
             
             mostrarToast(`Chamado #${id} restaurado!`, 'success');
@@ -798,13 +950,89 @@
                 localStorage.removeItem('chamadosArquivados');
                 renderizarKanban();
                 
-                // Fechar o modal se estiver aberto
                 const modal = bootstrap.Modal.getInstance(document.getElementById('modalArquivados'));
                 if (modal) {
                     modal.hide();
                 }
                 
                 mostrarToast('Todos os chamados restaurados!', 'success');
+            }
+        }
+
+        // ========== FUNÇÕES DE ATRIBUIÇÃO ==========
+
+        async function abrirModalAtribuir(chamadoId) {
+            const token = localStorage.getItem('token');
+            
+            const response = await fetch(`${API_URL}/equipamentos/${chamadoId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            if (!response.ok) {
+                mostrarToast('Erro ao carregar chamado', 'error');
+                return;
+            }
+            
+            const chamado = await response.json();
+            
+            document.getElementById('atribuirChamadoId').value = chamadoId;
+            document.getElementById('responsavelAtual').value = chamado.responsavel_nome || 'Não atribuído';
+            
+            const select = document.getElementById('novoResponsavel');
+            
+            if (listaUsuarios.length === 0) {
+                await carregarUsuarios();
+            }
+            
+            select.innerHTML = '<option value="">Selecione um técnico</option>';
+            listaUsuarios.forEach(usuario => {
+                if (usuario.ativo) {
+                    const option = document.createElement('option');
+                    option.value = usuario.id;
+                    option.textContent = usuario.nome_completo;
+                    if (usuario.id === chamado.responsavel_id) {
+                        option.selected = true;
+                    }
+                    select.appendChild(option);
+                }
+            });
+            
+            new bootstrap.Modal(document.getElementById('modalAtribuir')).show();
+        }
+
+        async function salvarAtribuicao() {
+            const chamadoId = document.getElementById('atribuirChamadoId').value;
+            const novoResponsavelId = document.getElementById('novoResponsavel').value;
+            
+            if (!novoResponsavelId) {
+                mostrarToast('Selecione um responsável', 'warning');
+                return;
+            }
+            
+            const token = localStorage.getItem('token');
+            
+            try {
+                const response = await fetch(`${API_URL}/equipamentos/${chamadoId}/atribuir`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ responsavel_id: parseInt(novoResponsavelId) })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    mostrarToast('Responsável atribuído com sucesso!', 'success');
+                    bootstrap.Modal.getInstance(document.getElementById('modalAtribuir')).hide();
+                    carregarChamados();
+                } else {
+                    mostrarToast(data.erro || 'Erro ao atribuir', 'error');
+                }
+            } catch (error) {
+                console.error('Erro:', error);
+                mostrarToast('Erro ao conectar', 'error');
             }
         }
 
@@ -827,52 +1055,5 @@
             }
         }
     </script>
-    <!-- Socket.IO -->
-<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-<script>
-
-    
-    // Configuração do Socket.IO
-    let socket;
-    
-    function initSocket() {
-        socket = io('http://localhost:5000');
-        
-        socket.on('connect', function() {
-            console.log('🟢 Conectado ao servidor');
-            if (typeof mostrarToast === 'function') {
-                mostrarToast('Conectado em tempo real', 'success');
-            }
-        });
-        
-        socket.on('atualizacao_sistema', function(data) {
-            console.log('📢 Atualização:', data);
-            
-            let mensagem = '';
-            if (data.acao === 'CREATE') mensagem = '🆕 Novo chamado criado!';
-            else if (data.acao === 'UPDATE') mensagem = '✏️ Chamado atualizado!';
-            else if (data.acao === 'MOVE') mensagem = '📦 Chamado movido!';
-            else if (data.acao === 'DELETE') mensagem = '🗑️ Chamado deletado!';
-            
-            if (mensagem && typeof mostrarToast === 'function') {
-                mostrarToast(mensagem, 'info');
-            }
-            
-            // Recarregar dados baseado na página
-            if (window.location.pathname === '/dashboard' && typeof carregarChamados === 'function') {
-                carregarChamados();
-            } else if (window.location.pathname === '/quadro-chamados' && typeof carregarChamadosLista === 'function') {
-                carregarChamadosLista();
-            }
-        });
-    }
-    
-    // Iniciar após login
-    document.addEventListener('DOMContentLoaded', function() {
-        if (localStorage.getItem('token')) {
-            initSocket();
-        }
-    });
-</script>
 </body>
 </html>
