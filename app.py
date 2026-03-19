@@ -2,20 +2,25 @@ from flask import Flask, request, jsonify, render_template, redirect, session
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit, join_room, leave_room
-from datetime import datetime, timedelta
+from datetime import datetime
 from functools import wraps
 import hashlib
 import secrets
-import json
+import os
+from dotenv import load_dotenv
 
 app = Flask(__name__)
 
-# Configurações
-app.config['SECRET_KEY'] = 'sua-chave-secreta-aqui-mude-em-producao'
-app.config['SESSION_COOKIE_SAMESITE'] = 'None'
-app.config['SESSION_COOKIE_SECURE'] = False
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:@localhost:3306/flask_crud'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+load_dotenv()
+
+# Configurações do banco de dados via variáveis de ambiente
+DB_HOST = os.getenv('DB_HOST', 'localhost')
+DB_USER = os.getenv('DB_USER', 'root')
+DB_PASSWORD = os.getenv('DB_PASSWORD', '')
+DB_NAME = os.getenv('DB_NAME', 'flask_crud')
+DB_PORT = os.getenv('DB_PORT', '3306')
+
+app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
 
 # Configuração CORS
 CORS(app, 
