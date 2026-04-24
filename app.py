@@ -13,6 +13,10 @@ app = Flask(__name__)
 
 load_dotenv()
 
+# ==================== CONFIGURAÇÕES ====================
+# SECRET_KEY é OBRIGATÓRIO para sessões
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'fallback-chave-padrao-para-desenvolvimento')
+
 # Configurações do banco de dados via variáveis de ambiente
 DB_HOST = os.getenv('DB_HOST', 'localhost')
 DB_USER = os.getenv('DB_USER', 'root')
@@ -21,6 +25,7 @@ DB_NAME = os.getenv('DB_NAME', 'flask_crud')
 DB_PORT = os.getenv('DB_PORT', '3306')
 
 app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Configuração CORS
 CORS(app, 
@@ -80,11 +85,11 @@ class Equipamento(db.Model):
     prioridade = db.Column(db.String(20), default='media')
     status = db.Column(db.String(20), default='entrada')
     criador_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
-    responsavel_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)  # NOVO
+    responsavel_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)
     criado_em = db.Column(db.DateTime, default=datetime.utcnow)
     
     criador = db.relationship('Usuario', foreign_keys=[criador_id], backref='criados')
-    responsavel = db.relationship('Usuario', foreign_keys=[responsavel_id], backref='responsavel')  # NOVO
+    responsavel = db.relationship('Usuario', foreign_keys=[responsavel_id], backref='responsavel')
     
     def to_dict(self):
         return {
@@ -99,8 +104,8 @@ class Equipamento(db.Model):
             'status': self.status,
             'criador_id': self.criador_id,
             'criador_nome': self.criador.nome_completo if self.criador else 'Sistema',
-            'responsavel_id': self.responsavel_id,  # NOVO
-            'responsavel_nome': self.responsavel.nome_completo if self.responsavel else None,  # NOVO
+            'responsavel_id': self.responsavel_id,
+            'responsavel_nome': self.responsavel.nome_completo if self.responsavel else None,
             'criado_em': self.criado_em.isoformat() if self.criado_em else None
         }
 
@@ -188,9 +193,6 @@ def registrar_log(acao, entidade, entidade_id=None, descricao=None,
 # ==================== FUNÇÕES SOCKET.IO ====================
 
 def notificar_equipamento(acao, equipamento):
-    """
-    Notifica todos os clientes sobre mudanças em equipamentos
-    """
     try:
         dados = {
             'tipo': 'equipamento',
@@ -200,18 +202,12 @@ def notificar_equipamento(acao, equipamento):
             'usuario': session.get('usuario_nome', 'Sistema'),
             'timestamp': datetime.utcnow().isoformat()
         }
-        
-        # Emitir para todos os clientes conectados
         socketio.emit('atualizacao_sistema', dados)
         print(f"📢 Notificação enviada: {acao} - Equipamento #{equipamento.id}")
-        
     except Exception as e:
         print(f"❌ Erro ao notificar: {e}")
 
 def notificar_exclusao(id, dados_antigos):
-    """
-    Notifica sobre exclusão de equipamento
-    """
     try:
         dados = {
             'tipo': 'equipamento',
@@ -221,10 +217,8 @@ def notificar_exclusao(id, dados_antigos):
             'usuario': session.get('usuario_nome', 'Sistema'),
             'timestamp': datetime.utcnow().isoformat()
         }
-        
         socketio.emit('atualizacao_sistema', dados)
         print(f"📢 Notificação enviada: DELETE - Equipamento #{id}")
-        
     except Exception as e:
         print(f"❌ Erro ao notificar: {e}")
 
@@ -524,7 +518,6 @@ def criar_equipamento():
         
         db.session.commit()
         
-        # NOTIFICAR TODOS OS USUÁRIOS
         notificar_equipamento('CREATE', equipamento)
         
         return jsonify(equipamento.to_dict()), 201
@@ -544,8 +537,6 @@ def atualizar_equipamento(id):
         if not equipamento:
             return jsonify({'erro': 'Equipamento não encontrado'}), 404
         
-        # VERIFICAÇÃO DE PERMISSÃO
-        # Se o chamado tem um responsável, só ele pode editar
         if equipamento.responsavel_id and equipamento.responsavel_id != request.usuario.id:
             return jsonify({
                 'erro': f'Este chamado está atribuído a {equipamento.responsavel.nome_completo}. Só ele pode editá-lo.'
@@ -583,48 +574,6 @@ def atualizar_equipamento(id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'erro': str(e)}), 500
-    if request.method == 'OPTIONS':
-        return '', 200
-        
-    try:
-        equipamento = Equipamento.query.get(id)
-        if not equipamento:
-            return jsonify({'erro': 'Equipamento não encontrado'}), 404
-        
-        dados_antigos = equipamento.to_dict()
-        dados = request.get_json()
-        
-        campos_permitidos = ['local', 'tipo_equipamento', 'defeito', 
-                           'observacoes', 'prioridade', 'status']
-        
-        campos_alterados = []
-        for campo in campos_permitidos:
-            if campo in dados and dados[campo] != getattr(equipamento, campo):
-                campos_alterados.append(campo)
-                setattr(equipamento, campo, dados[campo])
-        
-        if campos_alterados:
-            registrar_log(
-                acao='UPDATE',
-                entidade='equipamento',
-                entidade_id=id,
-                descricao=f"Equipamento #{id} atualizado: {', '.join(campos_alterados)}",
-                dados_antigos=dados_antigos,
-                dados_novos=equipamento.to_dict()
-            )
-            
-            db.session.commit()
-            
-            # NOTIFICAR TODOS OS USUÁRIOS
-            notificar_equipamento('UPDATE', equipamento)
-        else:
-            db.session.commit()
-        
-        return jsonify(equipamento.to_dict())
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'erro': str(e)}), 500
 
 @app.route('/api/equipamentos/<int:id>/mover', methods=['PATCH', 'OPTIONS'])
 @token_required
@@ -645,14 +594,11 @@ def mover_equipamento(id):
         if novo_status not in status_validos:
             return jsonify({'erro': 'Status inválido'}), 400
         
-        # VERIFICAÇÃO DE PERMISSÃO
-        # Se o chamado já tem um responsável, só ele pode mover
         if equipamento.responsavel_id and equipamento.responsavel_id != request.usuario.id:
             return jsonify({
                 'erro': f'Este chamado está atribuído a {equipamento.responsavel.nome_completo}. Só ele pode movê-lo.'
             }), 403
         
-        # Se está saindo de "entrada" e não tem responsável, atribui a quem está movendo
         if status_antigo == 'entrada' and not equipamento.responsavel_id:
             equipamento.responsavel_id = request.usuario.id
             descricao_extra = f" e atribuído a {request.usuario.nome_completo}"
@@ -676,46 +622,6 @@ def mover_equipamento(id):
         
         return jsonify({
             'mensagem': 'Status atualizado com sucesso' + (' e responsável atribuído' if descricao_extra else ''),
-            'equipamento': equipamento.to_dict()
-        })
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'erro': str(e)}), 500
-    if request.method == 'OPTIONS':
-        return '', 200
-        
-    try:
-        equipamento = Equipamento.query.get(id)
-        if not equipamento:
-            return jsonify({'erro': 'Equipamento não encontrado'}), 404
-        
-        dados = request.get_json()
-        novo_status = dados.get('status')
-        status_antigo = equipamento.status
-        
-        status_validos = ['entrada', 'manutencao', 'pronto', 'entregue']
-        if novo_status not in status_validos:
-            return jsonify({'erro': 'Status inválido'}), 400
-        
-        equipamento.status = novo_status
-        
-        registrar_log(
-            acao='MOVE',
-            entidade='equipamento',
-            entidade_id=id,
-            descricao=f"Equipamento movido de '{status_antigo}' para '{novo_status}'",
-            dados_antigos={'status': status_antigo},
-            dados_novos={'status': novo_status}
-        )
-        
-        db.session.commit()
-        
-        # NOTIFICAR TODOS OS USUÁRIOS
-        notificar_equipamento('MOVE', equipamento)
-        
-        return jsonify({
-            'mensagem': 'Status atualizado com sucesso',
             'equipamento': equipamento.to_dict()
         })
         
@@ -747,7 +653,6 @@ def deletar_equipamento(id):
         db.session.delete(equipamento)
         db.session.commit()
         
-        # NOTIFICAR TODOS OS USUÁRIOS
         notificar_exclusao(id, dados_equipamento)
         
         return jsonify({'mensagem': 'Equipamento deletado'})
@@ -772,6 +677,54 @@ def estatisticas_equipamentos():
         }
         return jsonify({'total': total, 'por_status': stats})
     except Exception as e:
+        return jsonify({'erro': str(e)}), 500
+
+@app.route('/api/equipamentos/<int:id>/atribuir', methods=['POST', 'OPTIONS'])
+@token_required
+def atribuir_equipamento(id):
+    if request.method == 'OPTIONS':
+        return '', 200
+        
+    try:
+        equipamento = Equipamento.query.get(id)
+        if not equipamento:
+            return jsonify({'erro': 'Equipamento não encontrado'}), 404
+        
+        dados = request.get_json()
+        novo_responsavel_id = dados.get('responsavel_id')
+        
+        novo_responsavel = Usuario.query.get(novo_responsavel_id)
+        if not novo_responsavel:
+            return jsonify({'erro': 'Usuário não encontrado'}), 404
+        
+        if equipamento.responsavel_id and equipamento.responsavel_id != request.usuario.id and request.usuario.usuario != 'admin':
+            return jsonify({
+                'erro': f'Apenas {equipamento.responsavel.nome_completo} ou admin podem transferir este chamado.'
+            }), 403
+        
+        responsavel_antigo_nome = equipamento.responsavel.nome_completo if equipamento.responsavel else 'Ninguém'
+        
+        equipamento.responsavel_id = novo_responsavel_id
+        
+        registrar_log(
+            acao='UPDATE',
+            entidade='equipamento',
+            entidade_id=id,
+            descricao=f"Responsável alterado de '{responsavel_antigo_nome}' para '{novo_responsavel.nome_completo}'",
+            dados_antigos={'responsavel_id': equipamento.responsavel_id},
+            dados_novos={'responsavel_id': novo_responsavel_id}
+        )
+        
+        db.session.commit()
+        notificar_equipamento('UPDATE', equipamento)
+        
+        return jsonify({
+            'mensagem': f'Responsável alterado para {novo_responsavel.nome_completo}',
+            'equipamento': equipamento.to_dict()
+        })
+        
+    except Exception as e:
+        db.session.rollback()
         return jsonify({'erro': str(e)}), 500
 
 # ==================== ROTAS DA API - UNIDADES ====================
@@ -855,58 +808,7 @@ def logout():
     session.clear()
     return redirect('/login')
 
-
-@app.route('/api/equipamentos/<int:id>/atribuir', methods=['POST', 'OPTIONS'])
-@token_required
-def atribuir_equipamento(id):
-    if request.method == 'OPTIONS':
-        return '', 200
-        
-    try:
-        equipamento = Equipamento.query.get(id)
-        if not equipamento:
-            return jsonify({'erro': 'Equipamento não encontrado'}), 404
-        
-        dados = request.get_json()
-        novo_responsavel_id = dados.get('responsavel_id')
-        
-        # Verificar se o novo responsável existe
-        novo_responsavel = Usuario.query.get(novo_responsavel_id)
-        if not novo_responsavel:
-            return jsonify({'erro': 'Usuário não encontrado'}), 404
-        
-        # Verificar permissão: só o responsável atual ou admin pode transferir
-        if equipamento.responsavel_id and equipamento.responsavel_id != request.usuario.id and request.usuario.usuario != 'admin':
-            return jsonify({
-                'erro': f'Apenas {equipamento.responsavel.nome_completo} ou admin podem transferir este chamado.'
-            }), 403
-        
-        responsavel_antigo_nome = equipamento.responsavel.nome_completo if equipamento.responsavel else 'Ninguém'
-        
-        equipamento.responsavel_id = novo_responsavel_id
-        
-        registrar_log(
-            acao='UPDATE',
-            entidade='equipamento',
-            entidade_id=id,
-            descricao=f"Responsável alterado de '{responsavel_antigo_nome}' para '{novo_responsavel.nome_completo}'",
-            dados_antigos={'responsavel_id': equipamento.responsavel_id},
-            dados_novos={'responsavel_id': novo_responsavel_id}
-        )
-        
-        db.session.commit()
-        notificar_equipamento('UPDATE', equipamento)
-        
-        return jsonify({
-            'mensagem': f'Responsável alterado para {novo_responsavel.nome_completo}',
-            'equipamento': equipamento.to_dict()
-        })
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'erro': str(e)}), 500
-
 # ==================== INICIALIZAÇÃO ====================
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True, port=5000)
+    socketio.run(app, debug=True, port=5000, allow_unsafe_werkzeug=True)
